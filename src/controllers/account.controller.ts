@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import Account from "../models/Account";
+import Entry from "../models/Entry";
 
 interface AuthRequest extends Request {
   userId?: string;
@@ -13,7 +15,7 @@ export const createAccount = async (req: AuthRequest, res: Response) => {
 
     const account = await Account.create({
       name,
-      color: color || "",
+      color: color || "#6366f1",
       balance: balance || 0,
       user: req.userId,
     });
@@ -28,7 +30,7 @@ export const createAccount = async (req: AuthRequest, res: Response) => {
 // GET ACCOUNTS
 export const getAccounts = async (req: AuthRequest, res: Response) => {
   try {
-    const accounts = await Account.find({ user: req.userId }).sort({ createdAt: -1 });
+    const accounts = await Account.find({ user: req.userId }).sort({ name: 1 });
     res.json(accounts);
   } catch (err) {
     console.error(err);
@@ -39,36 +41,49 @@ export const getAccounts = async (req: AuthRequest, res: Response) => {
 // UPDATE ACCOUNT
 export const updateAccount = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
-    const updates = req.body;
-
     const account = await Account.findOneAndUpdate(
-      { _id: id, user: req.userId },
-      updates,
-      { new: true }
+      { _id: req.params.id, user: req.userId },
+      req.body,
+      { new: true, runValidators: true }
     );
-
     if (!account) return res.status(404).json({ message: "Account not found" });
-
     res.json(account);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
-
-// DELETE ACCOUNT
+// DELETE ACCOUNT (Cascade Delete Entries)
 export const deleteAccount = async (req: AuthRequest, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const { id } = req.params;
 
-    const account = await Account.findOneAndDelete({ _id: id, user: req.userId });
+    // 1. Delete all entries associated with this account
+    await Entry.deleteMany(
+      {
+        user: req.userId,
+        $or: [{ account: id }, { fromAccount: id }, { toAccount: id }],
+      },
+      { session }
+    );
 
-    if (!account) return res.status(404).json({ message: "Account not found" });
+    // 2. Delete the account itself
+    const account = await Account.findOneAndDelete(
+      { _id: id, user: req.userId },
+      { session }
+    );
 
-    res.json({ message: "Account and related entries deleted successfully" });
-  } catch (err) {
+    if (!account) throw new Error("Account not found");
+
+    await session.commitTransaction();
+    res.json({ message: "Account and all associated entries deleted." });
+  } catch (err: any) {
     console.error(err);
-    res.status(500).json({ message: "Server error" });
+    await session.abortTransaction();
+    res.status(400).json({ message: err.message });
+  } finally {
+    session.endSession();
   }
 };

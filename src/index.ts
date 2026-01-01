@@ -30,4 +30,4 @@ app.get("/protected", authMiddleware, (req, res) => {
 });
 
 const PORT = 5000;
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

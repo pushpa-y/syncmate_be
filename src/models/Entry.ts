@@ -63,7 +63,11 @@ const EntrySchema = new Schema<IEntry>(
       required: true,
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    toJSON: { virtuals: true }, // Ensure your "baseAccount" virtual shows up in API responses
+    toObject: { virtuals: true },
+  }
 );
 
 /* VIRTUAL ACCOUNT */
