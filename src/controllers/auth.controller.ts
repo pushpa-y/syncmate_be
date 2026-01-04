@@ -65,11 +65,9 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Create JWT
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET!,  
-      { expiresIn: "7d" }
-    );
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, {
+      expiresIn: "7d",
+    });
 
     return res.json({
       message: "Login successful",
@@ -82,6 +80,65 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Login Error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const updateProfile = async (req: any, res: Response) => {
+  try {
+    const { name } = req.body;
+    const userId = req.userId; // Provided by authMiddleware
+
+    if (!name || name.trim().length < 2) {
+      return res
+        .status(400)
+        .json({ message: "Name must be at least 2 characters long" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { name: name.trim() },
+      { new: true } // Return the updated document
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+      },
+    });
+  } catch (error) {
+    console.error("Update Profile Error:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resetPassword = async (req: any, res: Response) => {
+  try {
+    const { newPassword } = req.body;
+    const userId = req.userId;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters long" });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await User.findByIdAndUpdate(userId, { password: hashedPassword });
+
+    return res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
